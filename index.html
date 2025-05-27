@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sankey Diagram - CSV Data</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+    }
+    svg {
+      font: 12px sans-serif;
+    }
+    .node rect {
+      fill-opacity: 0.9;
+      shape-rendering: crispEdges;
+    }
+    .node text {
+      pointer-events: none;
+      font-size: 12px;
+    }
+    .link {
+      fill: none;
+      stroke-opacity: 0.4;
+    }
+    .link:hover {
+      stroke-opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <h2>Sankey Diagram: Brand → Technology → Types → Company</h2>
+  <svg width="1200" height="600"></svg>
+
+  <script>
+    const svg = d3.select("svg"),
+          width = +svg.attr("width"),
+          height = +svg.attr("height");
+
+    const sankey = d3.sankey()
+      .nodeWidth(20)
+      .nodePadding(10)
+      .extent([[1, 1], [width - 1, height - 6]]);
+
+    const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+    d3.csv("data.csv").then(function(data) {
+      const nodeMap = new Map();
+      const links = [];
+
+      function getNode(name) {
+        if (!nodeMap.has(name)) {
+          nodeMap.set(name, { name });
+        }
+        return nodeMap.get(name);
+      }
+
+      data.forEach(row => {
+        const path = [
+          { key: row.Brand, label: "Brand" },
+          { key: row.TechnologyI, label: "TechnologyI" },
+          { key: row.TechnologyII, label: "TechnologyII" },
+          { key: row.TechnologyIII, label: "TechnologyIII" },
+          { key: row.TechnologyIV, label: "TechnologyIV" },
+          { key: row.TypeI, label: "TypeI" },
+          { key: row.TypeII, label: "TypeII" },
+          { key: row.Company, label: "Company" }
+        ].filter(d => d.key && d.key.trim() !== "");
+
+        for (let i = 0; i < path.length - 1; i++) {
+          const sourceId = `${path[i].key} (${path[i].label})`;
+          const targetId = `${path[i + 1].key} (${path[i + 1].label})`;
+
+          const source = getNode(sourceId);
+          const target = getNode(targetId);
+
+          const existing = links.find(l => l.source === source && l.target === target);
+          if (existing) {
+            existing.value += 1;
+          } else {
+            links.push({ source, target, value: 1 });
+          }
+        }
+      });
+
+      const graph = {
+        nodes: Array.from(nodeMap.values()),
+        links
+      };
+
+      sankey(graph);
+
+      svg.append("g")
+        .selectAll("path")
+        .data(graph.links)
+        .join("path")
+        .attr("class", "link")
+        .attr("d", d3.sankeyLinkHorizontal())
+        .attr("stroke", d => color(d.source.name))
+        .attr("stroke-width", d => Math.max(1, d.width));
+
+      const node = svg.append("g")
+        .selectAll("g")
+        .data(graph.nodes)
+        .join("g")
+        .attr("class", "node");
+
+      node.append("rect")
+        .attr("x", d => d.x0)
+        .attr("y", d => d.y0)
+        .attr("height", d => d.y1 - d.y0)
+        .attr("width", d => d.x1 - d.x0)
+        .attr("fill", d => color(d.name));
+
+      node.append("text")
+        .attr("x", d => d.x0 - 6)
+        .attr("y", d => (d.y1 + d.y0) / 2)
+        .attr("dy", "0.35em")
+        .attr("text-anchor", "end")
+        .text(d => d.name.replace(/\s*\(.*\)$/, ""))
+        .filter(d => d.x0 < width / 2)
+        .attr("x", d => d.x1 + 6)
+        .attr("text-anchor", "start");
+    });
+  </script>
+</body>
+</html>
