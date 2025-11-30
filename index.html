@@ -2,15 +2,27 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Sankey Diagram - CSV Data</title>
+  <title>Automata Studio - Projects Sankey Visualization</title>
+
+  <!-- Google Font: Roboto -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+
   <style>
     body {
-      font-family: sans-serif;
+      font-family: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
     }
     svg {
-      font: 12px sans-serif;
+      font-family: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12px;
+      border: 1px solid #ddd;
+      cursor: move; /* hint that you can drag */
     }
     .node rect {
       fill-opacity: 0.9;
@@ -27,23 +39,57 @@
     .link:hover {
       stroke-opacity: 0.7;
     }
+    h2 {
+      font-family: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-weight: 500;
+      text-align: center;
+      margin: 16px 0;
+    }
+
+    .logo {
+      display: block;
+      margin: 10px auto 5px auto;
+      width: 280px;      /* adjust size */
+      height: auto;
+    }
+
   </style>
 </head>
 <body>
-  <h2>Sankey Diagram: Brand → Technology → Types → Company</h2>
-  <svg width="1200" height="600"></svg>
+<img src="logo.png" alt="Logo" class="logo">
+  <h2>Projects Data Visualization</h2>
+  <svg width="2130" height="1000"></svg>
 
   <script>
     const svg = d3.select("svg"),
           width = +svg.attr("width"),
           height = +svg.attr("height");
 
+    const topMargin = 80; // space reserved for column headers
+
     const sankey = d3.sankey()
-      .nodeWidth(20)
+      .nodeWidth(70)
       .nodePadding(10)
-      .extent([[1, 1], [width - 1, height - 6]]);
+      .extent([[1, topMargin], [width - 1, height - 6]]); // start below headers
 
     const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+    function normalize(str) {
+      return str ? str.trim() : "";
+    }
+
+    // Group that will be zoomed/panned
+    const chart = svg.append("g")
+      .attr("class", "chart");
+
+    // Zoom behavior
+    const zoom = d3.zoom()
+      .scaleExtent([0.5, 3])        // min/max zoom
+      .on("zoom", (event) => {
+        chart.attr("transform", event.transform);
+      });
+
+    svg.call(zoom);
 
     d3.csv("data.csv").then(function(data) {
       const nodeMap = new Map();
@@ -58,15 +104,15 @@
 
       data.forEach(row => {
         const path = [
-          { key: row.Brand, label: "Brand" },
-          { key: row.TechnologyI, label: "TechnologyI" },
-          { key: row.TechnologyII, label: "TechnologyII" },
-          { key: row.TechnologyIII, label: "TechnologyIII" },
-          { key: row.TechnologyIV, label: "TechnologyIV" },
-          { key: row.TypeI, label: "TypeI" },
-          { key: row.TypeII, label: "TypeII" },
-          { key: row.Company, label: "Company" }
-        ].filter(d => d.key && d.key.trim() !== "");
+          { key: normalize(row.Brand),        label: "Brand" },
+          { key: normalize(row.TechnologyI),  label: "TechnologyI" },
+          { key: normalize(row.TechnologyII), label: "TechnologyII" },
+          { key: normalize(row.TechnologyIII),label: "TechnologyIII" },
+          { key: normalize(row.TechnologyIV), label: "TechnologyIV" },
+          { key: normalize(row.TypeI),        label: "TypeI" },
+          { key: normalize(row.TypeII),       label: "TypeII" },
+          { key: normalize(row.Company),      label: "Company" }
+        ].filter(d => d.key !== "");
 
         for (let i = 0; i < path.length - 1; i++) {
           const sourceId = `${path[i].key} (${path[i].label})`;
@@ -91,7 +137,56 @@
 
       sankey(graph);
 
-      svg.append("g")
+      // COLUMN HEADERS WITH FORCED ORDER, NO OVERLAP
+      const columns = {};
+      graph.nodes.forEach(d => {
+        const match = d.name.match(/\(([^)]+)\)$/); // text inside last parentheses
+        const colLabel = match ? match[1] : "Unknown";
+        const xCenter = (d.x0 + d.x1) / 2;
+
+        if (!columns[colLabel]) {
+          columns[colLabel] = [];
+        }
+        columns[colLabel].push(xCenter);
+      });
+
+      const columnOrder = [
+        "Brand",
+        "TechnologyI",
+        "TechnologyII",
+        "TechnologyIII",
+        "TechnologyIV",
+        "TypeI",
+        "TypeII",
+        "Company"
+      ];
+
+      const presentLabels = columnOrder.filter(label => columns[label]);
+
+      const availableXs = presentLabels
+        .map(label => d3.mean(columns[label]))
+        .sort((a, b) => a - b);
+
+      const columnArray = presentLabels.map((label, i) => ({
+        label,
+        x: availableXs[i]
+      }));
+
+      // Add headers *inside* chart so they zoom/pan too
+      chart.append("g")
+        .attr("class", "column-labels")
+        .selectAll("text")
+        .data(columnArray)
+        .join("text")
+        .attr("x", d => d.x)
+        .attr("y", topMargin / 2)
+        .attr("text-anchor", "middle")
+        .style("font-weight", "700")
+        .style("font-size", "14px")
+        .text(d => d.label);
+
+      // LINKS
+      chart.append("g")
         .selectAll("path")
         .data(graph.links)
         .join("path")
@@ -100,7 +195,8 @@
         .attr("stroke", d => color(d.source.name))
         .attr("stroke-width", d => Math.max(1, d.width));
 
-      const node = svg.append("g")
+      // NODES
+      const node = chart.append("g")
         .selectAll("g")
         .data(graph.nodes)
         .join("g")
